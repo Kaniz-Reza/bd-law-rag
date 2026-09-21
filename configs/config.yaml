@@ -1,0 +1,24 @@
+data:
+  source: "Kaggle: sakhadib/bangladesh-legal-acts-dataset (CC BY-SA 4.0)"
+  raw_dir: data/raw
+  processed_dir: data/processed
+  exclude_repealed: true
+
+chunking:
+  max_tokens: 400
+  overlap_tokens: 50
+
+retrieval:
+  top_k: 5
+  min_score: 0.35
+
+embedding:
+  name: intfloat/multilingual-e5-small
+  candidates:
+    - intfloat/multilingual-e5-small
+    - intfloat/multilingual-e5-base
+
+llm:
+  provider: ""
+  model: ""
+  max_output_tokens: 500

@@ -1,0 +1,22 @@
+[project]
+name = "bd-law-rag"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2",
+    "pyyaml",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
