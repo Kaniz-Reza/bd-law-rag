@@ -9,6 +9,7 @@ class DataConfig(BaseModel):
     raw_dir: str
     processed_dir: str
     exclude_repealed: bool
+    pilot_act_ids: list[int]
 
 
 class ChunkingConfig(BaseModel):
