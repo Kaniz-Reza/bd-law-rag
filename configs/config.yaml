@@ -3,6 +3,7 @@ data:
   raw_dir: data/raw
   processed_dir: data/processed
   exclude_repealed: true
+  pilot_act_ids: [952, 788, 1014, 1011, 921, 835, 914, 850, 1256, 1276, 1476, 791, 26, 11, 24, 48, 150, 46, 86, 180, 476, 64, 157, 36, 88, 10, 20, 138, 305, 90]
 
 chunking:
   max_tokens: 400
