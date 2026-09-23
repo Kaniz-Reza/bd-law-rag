@@ -6,6 +6,8 @@ dependencies = [
     "pydantic>=2",
     "pyyaml",
     "python-dotenv",
+    "sentence-transformers>=6.1.0",
+    "faiss-cpu>=1.15.1",
 ]
 
 [project.optional-dependencies]
