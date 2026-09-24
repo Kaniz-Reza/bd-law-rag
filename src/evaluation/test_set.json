@@ -1,0 +1,439 @@
+[
+  {
+    "id": "ts-01",
+    "question": "সাহিত্য বা দাতব্য উদ্দেশ্যে সমিতি গঠন করতে সর্বনিম্ন কতজন সদস্য দরকার?",
+    "language": "bn",
+    "expected_act_title": "The Societies Registration Act, 1860",
+    "expected_section_no": "1",
+    "source": "confirmed",
+    "chunk_ids": [
+      "10-0"
+    ]
+  },
+  {
+    "id": "ts-02",
+    "question": "সাধারণ চুরির (theft) সর্বোচ্চ শাস্তি কত বছরের কারাদণ্ড?",
+    "language": "bn",
+    "expected_act_title": "The Penal Code, 1860",
+    "expected_section_no": "379",
+    "source": "confirmed",
+    "chunk_ids": [
+      "11-413"
+    ]
+  },
+  {
+    "id": "ts-03",
+    "question": "What is the maximum punishment for committing robbery?",
+    "language": "en",
+    "expected_act_title": "The Penal Code, 1860",
+    "expected_section_no": "392",
+    "source": "confirmed",
+    "chunk_ids": [
+      "11-426"
+    ]
+  },
+  {
+    "id": "ts-04",
+    "question": "What compensation is a party entitled to when a contract is broken?",
+    "language": "en",
+    "expected_act_title": "The Contract Act, 1872",
+    "expected_section_no": "73",
+    "source": "confirmed",
+    "chunk_ids": [
+      "26-76-0",
+      "26-76-1",
+      "26-76-2",
+      "26-76-3",
+      "26-76-4",
+      "26-76-5"
+    ]
+  },
+  {
+    "id": "ts-05",
+    "question": "চুক্তিতে যদি ক্ষতিপূরণের পরিমাণ আগে থেকেই লেখা থাকে, তাহলে কী হয়?",
+    "language": "bn",
+    "expected_act_title": "The Contract Act, 1872",
+    "expected_section_no": "74",
+    "source": "confirmed",
+    "chunk_ids": [
+      "26-77-0",
+      "26-77-1"
+    ]
+  },
+  {
+    "id": "ts-06",
+    "question": "On what grounds can a decree of dissolution of marriage be granted under this Act?",
+    "language": "en",
+    "expected_act_title": "The Divorce Act, 1869",
+    "expected_section_no": "19",
+    "source": "confirmed",
+    "chunk_ids": [
+      "20-19"
+    ]
+  },
+  {
+    "id": "ts-07",
+    "question": "বিয়েতে যৌতুক দাবি করলে তা কি অপরাধ হিসেবে গণ্য হবে?",
+    "language": "bn",
+    "expected_act_title": "যৌতুক নিরোধ আইন, ২০১৮",
+    "expected_section_no": "৩",
+    "source": "confirmed",
+    "chunk_ids": [
+      "1256-2"
+    ]
+  },
+  {
+    "id": "ts-08",
+    "question": "যৌতুক দেওয়া বা নেওয়ার জন্য চুক্তি করাও কি শাস্তিযোগ্য?",
+    "language": "bn",
+    "expected_act_title": "যৌতুক নিরোধ আইন, ২০১৮",
+    "expected_section_no": "৪",
+    "source": "confirmed",
+    "chunk_ids": [
+      "1256-3"
+    ]
+  },
+  {
+    "id": "ts-09",
+    "question": "যৌতুকের কারণে কোনো নারীকে গুরুতর জখম করা হলে কী শাস্তি হবে?",
+    "language": "bn",
+    "expected_act_title": "নারী ও শিশু নির্যাতন দমন আইন, ২০০০",
+    "expected_section_no": "১১",
+    "source": "confirmed",
+    "chunk_ids": [
+      "835-12"
+    ]
+  },
+  {
+    "id": "ts-10",
+    "question": "If a lease is forfeited for non-payment of rent, can the tenant avoid eviction by paying the arrears?",
+    "language": "en",
+    "expected_act_title": "The Transfer of Property Act, 1882",
+    "expected_section_no": "114",
+    "source": "confirmed",
+    "chunk_ids": [
+      "48-126"
+    ]
+  },
+  {
+    "id": "ts-11",
+    "question": "চাকরি শেষ হওয়ার পর মালিকের দেওয়া বাসস্থান কত দিনের মধ্যে খালি করতে হবে?",
+    "language": "bn",
+    "expected_act_title": "বাংলাদেশ শ্রম আইন, ২০০৬",
+    "expected_section_no": "৩২",
+    "source": "confirmed",
+    "chunk_ids": [
+      "952-33"
+    ]
+  },
+  {
+    "id": "ts-12",
+    "question": "বিদেশ থেকে আসা কোনো যানবাহন কাস্টমস স্টেশন ছাড়া অন্য কোথাও থামতে পারবে কি?",
+    "language": "bn",
+    "expected_act_title": "কাস্টমস আইন, ২০২৩",
+    "expected_section_no": "৪৯",
+    "source": "confirmed",
+    "chunk_ids": [
+      "1476-48"
+    ]
+  },
+  {
+    "id": "ts-13",
+    "question": "How many persons are required to form a private company versus a public company?",
+    "language": "en",
+    "expected_act_title": "কোম্পানী আইন, ১৯৯৪",
+    "expected_section_no": "৫",
+    "source": "confirmed",
+    "chunk_ids": [
+      "788-4"
+    ]
+  },
+  {
+    "id": "ts-14",
+    "question": "Who bears the burden of proving a fact in a legal proceeding?",
+    "language": "en",
+    "expected_act_title": "The Evidence Act, 1872",
+    "expected_section_no": "101",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "24-115"
+    ]
+  },
+  {
+    "id": "ts-15",
+    "question": "What happens if a cheque is dishonoured due to insufficient funds?",
+    "language": "en",
+    "expected_act_title": "The Negotiable Instruments Act, 1881",
+    "expected_section_no": "138",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "46-163-0",
+      "46-163-1"
+    ]
+  },
+  {
+    "id": "ts-16",
+    "question": "Can a court excuse a delay in filing an appeal if there is sufficient cause?",
+    "language": "en",
+    "expected_act_title": "The Limitation Act, 1908",
+    "expected_section_no": "5",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "88-4"
+    ]
+  },
+  {
+    "id": "ts-17",
+    "question": "How is a contract of sale of goods defined under this Act?",
+    "language": "en",
+    "expected_act_title": "The Sale of Goods Act, 1930",
+    "expected_section_no": "4",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "150-3"
+    ]
+  },
+  {
+    "id": "ts-18",
+    "question": "তথ্য অধিকার আইনে আবেদনের কত দিনের মধ্যে তথ্য দিতে হয়?",
+    "language": "bn",
+    "expected_act_title": "তথ্য অধিকার আইন, ২০০৯",
+    "expected_section_no": "৯",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "1011-8-0",
+      "1011-8-1"
+    ]
+  },
+  {
+    "id": "ts-19",
+    "question": "এই আইনের অধীনে ঠিক কোন কোন উদ্দেশ্যে একটি সমিতি নিবন্ধিত হতে পারে?",
+    "language": "bn",
+    "expected_act_title": "The Societies Registration Act, 1860",
+    "expected_section_no": "20",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "10-20"
+    ]
+  },
+  {
+    "id": "ts-20",
+    "question": "খুনের (murder) শাস্তি এই আইনে কী নির্ধারিত আছে?",
+    "language": "bn",
+    "expected_act_title": "The Penal Code, 1860",
+    "expected_section_no": "302",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "11-331"
+    ]
+  },
+  {
+    "id": "ts-21",
+    "question": "What are the essential elements for an agreement to become a valid contract?",
+    "language": "en",
+    "expected_act_title": "The Contract Act, 1872",
+    "expected_section_no": "10",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "26-9"
+    ]
+  },
+  {
+    "id": "ts-22",
+    "question": "Can a wife claim alimony while a divorce case is still pending in court?",
+    "language": "en",
+    "expected_act_title": "The Divorce Act, 1869",
+    "expected_section_no": "36",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "20-36"
+    ]
+  },
+  {
+    "id": "ts-23",
+    "question": "এই আইনে 'যৌতুক' বলতে কী বোঝানো হয়েছে?",
+    "language": "bn",
+    "expected_act_title": "যৌতুক নিরোধ আইন, ২০১৮",
+    "expected_section_no": "২",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "1256-1"
+    ]
+  },
+  {
+    "id": "ts-24",
+    "question": "ধর্ষণের শাস্তি এই আইনে কী নির্ধারিত আছে?",
+    "language": "bn",
+    "expected_act_title": "নারী ও শিশু নির্যাতন দমন আইন, ২০০০",
+    "expected_section_no": "৯",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "835-8"
+    ]
+  },
+  {
+    "id": "ts-25",
+    "question": "How is a 'sale' of immovable property defined under this Act?",
+    "language": "en",
+    "expected_act_title": "The Transfer of Property Act, 1882",
+    "expected_section_no": "54",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "48-58"
+    ]
+  },
+  {
+    "id": "ts-26",
+    "question": "একজন শ্রমিক দৈনিক সর্বোচ্চ কত ঘণ্টা কাজ করতে পারবেন?",
+    "language": "bn",
+    "expected_act_title": "বাংলাদেশ শ্রম আইন, ২০০৬",
+    "expected_section_no": "১০০",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "952-104"
+    ]
+  },
+  {
+    "id": "ts-27",
+    "question": "দুর্ঘটনা বা খারাপ আবহাওয়ার কারণে যানবাহন কাস্টমস স্টেশনে পৌঁছাতে ব্যর্থ হলে কী করতে হবে?",
+    "language": "bn",
+    "expected_act_title": "কাস্টমস আইন, ২০২৩",
+    "expected_section_no": "৫০",
+    "source": "confirmed",
+    "chunk_ids": [
+      "1476-49"
+    ]
+  },
+  {
+    "id": "ts-28",
+    "question": "কোম্পানি নিবন্ধনের পর কোন ধরনের রেজিস্টার সংরক্ষণ করতে হয়?",
+    "language": "bn",
+    "expected_act_title": "কোম্পানী আইন, ১৯৯৪",
+    "expected_section_no": "৪১",
+    "source": "confirmed",
+    "chunk_ids": [
+      "788-41"
+    ]
+  },
+  {
+    "id": "ts-29",
+    "question": "When can a court order specific performance of a contract instead of awarding damages?",
+    "language": "en",
+    "expected_act_title": "The Specific Relief Act, 1877",
+    "expected_section_no": "12",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "36-11-0",
+      "36-11-1"
+    ]
+  },
+  {
+    "id": "ts-30",
+    "question": "Who can a court appoint as guardian of a minor's person or property?",
+    "language": "en",
+    "expected_act_title": "The Guardians and Wards Act, 1890",
+    "expected_section_no": "7",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "64-7"
+    ]
+  },
+  {
+    "id": "ts-31",
+    "question": "Which courts have jurisdiction to try civil suits under this Code?",
+    "language": "en",
+    "expected_act_title": "The Code of Civil Procedure, 1908",
+    "expected_section_no": "9",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "86-8"
+    ]
+  },
+  {
+    "id": "ts-32",
+    "question": "কোন কোন দলিল নিবন্ধন করা আইনত বাধ্যতামূলক?",
+    "language": "bn",
+    "expected_act_title": "The Registration Act, 1908",
+    "expected_section_no": "17",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "90-17-0",
+      "90-17-1",
+      "90-17-2"
+    ]
+  },
+  {
+    "id": "ts-33",
+    "question": "What formalities must be followed for a will to be validly executed?",
+    "language": "en",
+    "expected_act_title": "The Succession Act, 1925",
+    "expected_section_no": "63",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "138-63"
+    ]
+  },
+  {
+    "id": "ts-34",
+    "question": "অংশীদারি ব্যবসা (partnership) বলতে এই আইনে কী বোঝানো হয়েছে?",
+    "language": "bn",
+    "expected_act_title": "The Partnership Act, 1932",
+    "expected_section_no": "4",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "157-3"
+    ]
+  },
+  {
+    "id": "ts-35",
+    "question": "কোন কোন কারণে একজন মুসলিম নারী আদালতের মাধ্যমে বিবাহবিচ্ছেদ দাবি করতে পারেন?",
+    "language": "bn",
+    "expected_act_title": "The Dissolution of Muslim Marriages Act, 1939",
+    "expected_section_no": "2",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "180-1-0",
+      "180-1-1"
+    ]
+  },
+  {
+    "id": "ts-36",
+    "question": "Does a man need permission before contracting a second marriage while his existing wife is alive?",
+    "language": "en",
+    "expected_act_title": "The Muslim Family Laws Ordinance, 1961",
+    "expected_section_no": "6",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "305-5"
+    ]
+  },
+  {
+    "id": "ts-37",
+    "question": "কোনো শিল্প-কারখানা স্থাপনের আগে পরিবেশ ছাড়পত্র নেওয়া কি বাধ্যতামূলক?",
+    "language": "bn",
+    "expected_act_title": "বাংলাদেশ পরিবেশ সংরক্ষণ আইন, ১৯৯৫",
+    "expected_section_no": "১২",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "791-18"
+    ]
+  },
+  {
+    "id": "ts-38",
+    "question": "মাদকদ্রব্য বহন বা সেবনের জন্য এই আইনে কী শাস্তির বিধান আছে?",
+    "language": "bn",
+    "expected_act_title": "মাদকদ্রব্য নিয়ন্ত্রণ আইন, ২০১৮",
+    "expected_section_no": "৩৬",
+    "source": "general_knowledge",
+    "chunk_ids": [
+      "1276-35-0",
+      "1276-35-1",
+      "1276-35-2",
+      "1276-35-3",
+      "1276-35-4",
+      "1276-35-5",
+      "1276-35-6",
+      "1276-35-7"
+    ]
+  }
+]
