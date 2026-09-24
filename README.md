@@ -22,6 +22,7 @@ a portfolio project — from raw legal text to a served, monitored API.
 - [Setup](#setup)
 - [Project structure](#project-structure)
 - [Reproducing the data](#reproducing-the-data)
+- [Retrieval evaluation](#retrieval-evaluation)
 - [Tech stack](#tech-stack)
 - [Data](#data)
 - [License](#license)
@@ -64,7 +65,7 @@ Bangla.
 | Pilot act selection — 30 acts locked                         | ✅ Done    |
 | Chunking — split sections into retrieval-sized chunks        | ✅ Done    |
 | Embeddings and a searchable vector index                     | ✅ Done    |
-| Hand-written test set and retrieval metrics (recall@k, MRR)  | ⬜ Next    |
+| Hand-written test set and retrieval metrics (recall@k, MRR)  | ✅ Done    |
 | Answer generation with an LLM, citations, refusal path       | ⬜ Planned |
 | FastAPI service (`/health`, `/ask`)                          | ⬜ Planned |
 | Docker and docker-compose                                    | ⬜ Planned |
@@ -127,6 +128,58 @@ python -m src.retrieval.search_test
 > **Note:** `embed.py` downloads the `BAAI/bge-m3` model (~4.3 GB) on first
 > run and embeds all chunks on CPU, which takes roughly 1.5–2.5 hours
 > depending on hardware. Subsequent runs reuse the cached model.
+
+4. (Optional) Run the retrieval evaluation suite:
+
+```bash
+python -m src.evaluation.resolve_chunk_ids   # fills in chunk_ids in test_set.json
+python -m src.evaluation.evaluate            # -> Recall@k, MRR (see below)
+```
+
+---
+
+## Retrieval evaluation
+
+Retrieval quality is measured against a 38-question hand-written test set
+(`src/evaluation/test_set.json`), spanning 25 of the 30 pilot acts in both
+Bangla and English, including cross-lingual questions (asked in one
+language, answered by a chunk written in the other). Correct chunks are
+resolved against the real corpus by act and section
+(`src/evaluation/resolve_chunk_ids.py`) rather than guessed, so every
+answer key is verified to actually exist before evaluation runs.
+
+| Metric    | Score |
+| --------- | ----- |
+| Recall@1  | 0.553 |
+| Recall@3  | 0.842 |
+| Recall@5  | 0.921 |
+| Recall@10 | 0.921 |
+| Recall@20 | 0.921 |
+| Recall@30 | 0.974 |
+| Recall@50 | 1.000 |
+| MRR       | 0.704 |
+
+**Known limitation.** Three of the 38 questions fail to retrieve their
+answer within the top 10; however, the table shows every correct chunk is
+present by rank 50, indicating a ranking problem rather than a
+comprehension failure. Two patterns account for most of it: large,
+vocabulary-dense acts (e.g. কোম্পানী আইন, ১৯৯৪ at 471 chunks) dominate the
+similarity ranking for questions that happen to share common legal terms
+such as "registration," even when the correct answer lies elsewhere; and
+acts with many topically similar sections (e.g. the CPC's
+court-jurisdiction provisions) make it difficult to rank the single
+correct section above its close neighbours.
+
+**Evaluated and set aside — cross-encoder reranking.** Adding a
+`BAAI/bge-reranker-v2-m3` reranking stage over the FAISS top-50
+(`src/evaluation/evaluate_rerank.py`) improved Recall@1 (0.553 → 0.632)
+and MRR (0.704 → 0.733), but left Recall@5/10 unchanged: one previously
+failing question was resolved while a different one newly failed, for no
+net change in the failure count. At approximately 70 seconds per question
+on CPU, versus sub-second latency for plain FAISS retrieval, the added
+cost is not currently justified by the gain, so reranking is not part of
+the default pipeline. It remains a documented option to revisit with GPU
+inference or a lighter-weight reranker.
 
 ---
 
