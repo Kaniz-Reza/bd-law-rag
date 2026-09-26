@@ -22,7 +22,9 @@ a portfolio project — from raw legal text to a served, monitored API.
 - [Setup](#setup)
 - [Project structure](#project-structure)
 - [Reproducing the data](#reproducing-the-data)
+- [Usage](#usage)
 - [Retrieval evaluation](#retrieval-evaluation)
+- [Generation and refusal path](#generation-and-refusal-path)
 - [Tech stack](#tech-stack)
 - [Data](#data)
 - [License](#license)
@@ -37,16 +39,23 @@ flowchart LR
     B --> C["Chunking<br/>src/retrieval"]
     C --> D["Embedding<br/>BAAI/bge-m3"]
     D --> E[("FAISS index")]
-    E --> F["Retrieval<br/>top-k search"]
-    F --> G["Generation<br/>LLM + citations"]
+    C --> BM[("BM25 index<br/>(keyword)")]
+    E --> F1["Dense search<br/>top-100"]
+    BM --> F2["Keyword search<br/>top-100"]
+    F1 --> RRF["Weighted RRF<br/>fusion"]
+    F2 --> RRF
+    RRF --> G["Generation<br/>LLM + citations"]
     G --> H["FastAPI service<br/>/ask"]
 ```
 
 A user question (Bangla or English) is embedded with the same multilingual
-model used to index the corpus, matched against the FAISS index for the
-most relevant sections, then passed to an LLM that drafts an answer citing
-the exact Act and section — or declines if nothing in the pilot corpus is
-actually relevant.
+model used to index the corpus, then matched against the corpus with
+**hybrid retrieval** — dense FAISS search plus BM25 keyword search,
+combined by weighted Reciprocal Rank Fusion (see
+[Retrieval evaluation](#retrieval-evaluation) for why) — and the fused
+top chunks are passed to an LLM that drafts an answer citing the exact
+Act and section, or declines if nothing in the pilot corpus is actually
+relevant.
 
 **Pilot scope:** 30 acts (12 Bengali, 18 English) · ~3,691 sections ·
 ~3,920 retrieval chunks. Acts span the Penal Code and Contract Act, 1872
@@ -66,7 +75,7 @@ Bangla.
 | Chunking — split sections into retrieval-sized chunks        | ✅ Done    |
 | Embeddings and a searchable vector index                     | ✅ Done    |
 | Hand-written test set and retrieval metrics (recall@k, MRR)  | ✅ Done    |
-| Answer generation with an LLM, citations, refusal path       | ⬜ Planned |
+| Answer generation with an LLM, citations, refusal path       | ✅ Done    |
 | FastAPI service (`/health`, `/ask`)                          | ⬜ Planned |
 | Docker and docker-compose                                    | ⬜ Planned |
 | CI/CD (GitHub Actions) with an evaluation gate                | ⬜ Planned |
@@ -85,6 +94,10 @@ source .venv/Scripts/activate   # Windows Git Bash; use `source .venv/bin/activa
 make setup
 pre-commit install
 ```
+
+Answer generation calls the Gemini API (free tier — no cost, no credit
+card). Copy `.env.example` to `.env` and set `GEMINI_API_KEY` to a key
+from [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
 
 ---
 
@@ -133,20 +146,39 @@ python -m src.retrieval.search_test
 
 ```bash
 python -m src.evaluation.resolve_chunk_ids   # fills in chunk_ids in test_set.json
-python -m src.evaluation.evaluate            # -> Recall@k, MRR (see below)
+python -m src.evaluation.evaluate            # -> plain FAISS Recall@k, MRR
+python -m src.evaluation.evaluate_hybrid     # -> hybrid (FAISS+BM25) Recall@k, MRR
 ```
+
+---
+
+## Usage
+
+Once the data is built and `GEMINI_API_KEY` is set (see [Setup](#setup)),
+ask a question directly from the command line:
+
+```bash
+python -m src.generation.generate "চুরি করলে সর্বোচ্চ কত বছর জেল হতে পারে?"
+```
+
+The answer is generated only from retrieved chunks, cites the Act and
+section for every claim, and declines instead of guessing when the
+corpus doesn't cover the question — see
+[Generation and refusal path](#generation-and-refusal-path).
 
 ---
 
 ## Retrieval evaluation
 
-Retrieval quality is measured against a 38-question hand-written test set
-(`src/evaluation/test_set.json`), spanning 25 of the 30 pilot acts in both
-Bangla and English, including cross-lingual questions (asked in one
-language, answered by a chunk written in the other). Correct chunks are
-resolved against the real corpus by act and section
-(`src/evaluation/resolve_chunk_ids.py`) rather than guessed, so every
-answer key is verified to actually exist before evaluation runs.
+### Baseline: plain FAISS
+
+Retrieval quality was first measured against a hand-written 38-question
+test set, spanning 25 of the 30 pilot acts in both Bangla and English,
+including cross-lingual questions (asked in one language, answered by a
+chunk written in the other). Correct chunks were resolved against the real
+corpus by act and section (`src/evaluation/resolve_chunk_ids.py`) rather
+than guessed, so every answer key was verified to actually exist before
+evaluation ran.
 
 | Metric    | Score |
 | --------- | ----- |
@@ -159,16 +191,15 @@ answer key is verified to actually exist before evaluation runs.
 | Recall@50 | 1.000 |
 | MRR       | 0.704 |
 
-**Known limitation.** Three of the 38 questions fail to retrieve their
-answer within the top 10; however, the table shows every correct chunk is
-present by rank 50, indicating a ranking problem rather than a
-comprehension failure. Two patterns account for most of it: large,
-vocabulary-dense acts (e.g. কোম্পানী আইন, ১৯৯৪ at 471 chunks) dominate the
-similarity ranking for questions that happen to share common legal terms
-such as "registration," even when the correct answer lies elsewhere; and
-acts with many topically similar sections (e.g. the CPC's
-court-jurisdiction provisions) make it difficult to rank the single
-correct section above its close neighbours.
+**Known limitation.** Three of the 38 questions failed to retrieve their
+answer within the top 10; every correct chunk was present by rank 50,
+indicating a ranking problem rather than a comprehension failure. Two
+patterns accounted for most of it: large, vocabulary-dense acts (e.g.
+কোম্পানী আইন, ১৯৯৪ at 471 chunks) dominate the similarity ranking for
+questions that happen to share common legal terms such as "registration,"
+even when the correct answer lies elsewhere; and acts with many topically
+similar sections (e.g. the CPC's court-jurisdiction provisions) make it
+difficult to rank the single correct section above its close neighbours.
 
 **Evaluated and set aside — cross-encoder reranking.** Adding a
 `BAAI/bge-reranker-v2-m3` reranking stage over the FAISS top-50
@@ -181,14 +212,105 @@ cost is not currently justified by the gain, so reranking is not part of
 the default pipeline. It remains a documented option to revisit with GPU
 inference or a lighter-weight reranker.
 
+### A specific failure: hybrid search (FAISS + BM25)
+
+One of the three questions failing in the 38-question set asked about the
+punishment for **theft** — a common legal term any retriever should
+handle easily. A closer look showed the correct chunk (The Penal Code,
+1860, section 379) was ranked **66th out of 3,920 chunks** by plain
+FAISS: not missing, just buried. Dense embedding similarity treats
+"theft" as semantically close to dozens of other property-crime sections,
+and nothing in a pure embedding search boosts an exact keyword match.
+
+This is a textbook case for combining dense (FAISS) and sparse/keyword
+(BM25) retrieval. `src/retrieval/hybrid_search.py` runs both searches
+independently and combines their rankings with **Reciprocal Rank Fusion
+(RRF)**: each chunk's score is the sum of `1 / (k + rank)` across every
+list it appears in.
+
+An unweighted (50/50) fusion was tried first and made *every* metric
+worse (Recall@1 0.553 → 0.289, MRR 0.704 → 0.448): most legal questions
+use common, generic legal vocabulary with no rare keyword for BM25 to
+lock onto, so BM25's noisier ranking was outvoting FAISS's otherwise-good
+one. Weighting the fusion to trust FAISS more, and let BM25 only nudge
+the result instead of splitting the vote evenly, fixed this. At
+**FAISS weight 0.85 / BM25 weight 0.15**, the theft chunk moved from
+rank 66 to **rank 1**, and overall metrics on the same 38 questions
+recovered to close to the plain-FAISS baseline.
+
+**Checking for overfitting.** Those weights were chosen by tuning
+against the same 38 questions used for the baseline above — which shows
+the fix works on that set, but says nothing about whether it generalizes.
+To check, the test set was rebuilt from scratch: 60 new questions
+(`ts-01`–`ts-60`), sampled from chunks never used in the original 38,
+covering all 30 pilot acts, and never touched during weight tuning.
+`src/evaluation/test_set.json` now holds only this held-out set — the
+original 38 were retired once the new set confirmed the weights held up,
+so the table above no longer reproduces by running `evaluate.py` today;
+the table below does.
+
+| Metric    | Plain FAISS | Hybrid (0.85 / 0.15) |
+| --------- | ----------- | --------------------- |
+| Recall@1  | 0.750       | 0.750                 |
+| Recall@3  | 0.867       | 0.883                 |
+| Recall@5  | 0.900       | 0.900                 |
+| Recall@10 | 0.950       | 0.950                 |
+| MRR       | 0.818       | 0.819                 |
+
+*(Hybrid also reaches Recall@20 = 0.983, Recall@30 = 0.983, and
+Recall@50 = 1.000 on this set; `evaluate.py` doesn't report those
+higher-k values for plain FAISS.)*
+
+On 60 genuinely held-out questions, hybrid retrieval is statistically
+tied with plain FAISS — three questions (`ts-14`, `ts-26`, `ts-60`) miss
+the top 10 under both retrievers, the same ranking-not-comprehension
+pattern as the original baseline. This is not a general improvement, but
+it isn't a regression either, and combined with the theft-style fix
+demonstrated above, it's why hybrid search — not plain FAISS — is what
+`src/generation/generate.py` uses in production
+(`FAISS_CANDIDATES=100, BM25_CANDIDATES=100, FAISS_WEIGHT=0.85,
+BM25_WEIGHT=0.15, TOP_K=10`): it costs nothing measurable on ordinary
+questions while closing a real, demonstrated failure mode on
+rare-keyword ones.
+
+---
+
+## Generation and refusal path
+
+`src/generation/generate.py` retrieves with the hybrid search above,
+assembles the fused top-10 chunks into a labelled prompt, and asks
+Gemini (free tier) to answer using only that context — citing the Act
+and section for every claim, and declining outright if the retrieved
+context doesn't actually cover the question.
+
+Spot-checked manually:
+
+- **Grounded answer + citations.** Asked the theft question above; the
+  answer cited sections 379–382 with the correct penalty for each,
+  verified word-for-word against the source chunks (not just
+  plausible-sounding text), and correctly identified section 382
+  (10 years, *rigorous* imprisonment) as the actual maximum — not
+  section 379 (3 years) alone.
+- **Refusal path.** Asked two questions clearly outside the 30-act
+  pilot corpus (income tax return deadlines; which constitutional
+  article covers fundamental rights). Both times, despite FAISS/BM25
+  still returning 10 tangentially-related chunks (retrieval always
+  returns *something*), the model correctly stated the provided acts
+  don't cover the question instead of guessing from the nearest
+  available chunk.
+
+This is manual spot-checking, not an automated benchmark — a natural
+next step would be a small labelled set of in-corpus vs. out-of-corpus
+questions to track this with a metric instead of a few examples.
+
 ---
 
 ## Tech stack
 
 - **Language / tooling:** Python 3.11, [uv](https://docs.astral.sh/uv/) for dependency management, pre-commit hooks
 - **Embeddings:** [`BAAI/bge-m3`](https://huggingface.co/BAAI/bge-m3) (multilingual, via `sentence-transformers`)
-- **Vector search:** FAISS (flat, inner-product / cosine similarity)
-- **Generation:** LLM-based answer synthesis with citations *(planned)*
+- **Retrieval:** FAISS (flat, inner-product / cosine similarity) for dense search, [`rank_bm25`](https://github.com/dorianbrown/rank_bm25) for keyword search, combined via weighted Reciprocal Rank Fusion
+- **Generation:** Gemini API (free tier) — answer synthesis with citations and a refusal path
 - **Serving:** FastAPI *(planned)*
 - **Ops:** Docker, GitHub Actions CI/CD, Prometheus/Grafana monitoring *(planned)*
 
