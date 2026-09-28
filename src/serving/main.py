@@ -107,9 +107,23 @@ def ask(request: AskRequest) -> AskResponse:
     try:
         answer = call_llm(resources["client"], request.question, chunks)
     except genai_errors.ServerError as exc:
+        # Gemini's servers are transiently overloaded -- call_llm() already
+        # retried 5 times internally (tenacity) before giving up.
         raise HTTPException(
             status_code=503,
             detail="Gemini's servers are temporarily overloaded -- try again shortly.",
+        ) from exc
+    except genai_errors.ClientError as exc:
+        # Covers things like the free tier's daily request quota being
+        # exhausted (429 RESOURCE_EXHAUSTED) -- not retryable on a short
+        # timescale, so call_llm() does not retry this one; we just report
+        # it clearly instead of letting it crash into a bare 500.
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Gemini rejected the request -- often a rate limit or quota "
+                "issue (common on the free tier). Try again later."
+            ),
         ) from exc
 
     sources = [Source(act_title=c["act_title"], section_no=c["section_no"]) for c in chunks]
