@@ -28,11 +28,16 @@ Reads:  data/processed/chunks.jsonl
 
 Usage:
     python -m src.evaluation.evaluate_hybrid
+
+Exit code: 0 if recall@10 and MRR both clear the CI gate thresholds
+below, 1 otherwise -- this is what lets GitHub Actions block a merge
+on a retrieval-quality regression.
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import faiss
@@ -62,6 +67,13 @@ RECALL_KS = (1, 3, 5, 10, 20, 30, 50)
 # of this run is to check whether these already-chosen weights generalize.
 FAISS_WEIGHT = 0.85
 BM25_WEIGHT = 0.15
+
+# Minimum scores CI accepts -- below either, the gate fails the build.
+# Current scores are recall@10=0.950, mrr=0.819; these leave enough buffer
+# for small legitimate changes to shift a borderline question or two
+# without tripping the gate, while still catching a real regression.
+MIN_RECALL_AT_10 = 0.85
+MIN_MRR = 0.70
 
 
 def load_chunks(path: Path) -> list[dict]:
@@ -149,6 +161,15 @@ def main() -> None:
         print(f"\n{len(failures)} question(s) still missing from top-10:")
         for r in failures:
             print(f"  [{r['id']}] {r['question']} -- rank: {r['rank']}")
+
+    print("\n" + "=" * 50)
+    if metrics["recall@10"] < MIN_RECALL_AT_10 or metrics["mrr"] < MIN_MRR:
+        print(
+            f"GATE FAILED: recall@10={metrics['recall@10']:.3f} "
+            f"(min {MIN_RECALL_AT_10}), mrr={metrics['mrr']:.3f} (min {MIN_MRR})"
+        )
+        sys.exit(1)
+    print("GATE PASSED")
 
 
 if __name__ == "__main__":
