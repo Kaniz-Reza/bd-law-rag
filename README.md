@@ -6,9 +6,9 @@
 
 **Bangla and English question answering over Bangladeshi law.**
 
-Answers cite the exact Act and section, the service refuses when the law
-does not cover the question, and the pipeline is monitored for retrieval
-quality, latency, and cost.
+Answers cite the exact Act and section, the service refuses when the
+law does not cover the question, and retrieval quality is evaluated
+against a held-out test set.
 
 This is an end-to-end RAG (Retrieval-Augmented Generation) system built as
 a portfolio project — from raw legal text to a served, monitored API.
@@ -76,8 +76,8 @@ Bangla.
 | Embeddings and a searchable vector index                     | ✅ Done    |
 | Hand-written test set and retrieval metrics (recall@k, MRR)  | ✅ Done    |
 | Answer generation with an LLM, citations, refusal path       | ✅ Done    |
-| FastAPI service (`/health`, `/ask`)                          | ⬜ Planned |
-| Docker and docker-compose                                    | ⬜ Planned |
+| FastAPI service (`/health`, `/ask`)                          | ✅ Done    |
+| Docker and docker-compose                                    | ✅ Done    |
 | CI/CD (GitHub Actions) with an evaluation gate                | ⬜ Planned |
 | Deployment with a public URL                                 | ⬜ Planned |
 | Monitoring (Prometheus/Grafana) and a drift simulation        | ⬜ Planned |
@@ -165,6 +165,30 @@ The answer is generated only from retrieved chunks, cites the Act and
 section for every claim, and declines instead of guessing when the
 corpus doesn't cover the question — see
 [Generation and refusal path](#generation-and-refusal-path).
+
+### Running the API
+
+The same pipeline is also served over HTTP with FastAPI, containerized
+with Docker so it runs the same way on any machine:
+
+```bash
+docker compose up --build
+```
+
+This builds the image, starts the service on `http://localhost:8000`,
+and persists the downloaded embedding model in a named volume so it
+isn't re-downloaded on every restart. Interactive API docs are at
+`http://localhost:8000/docs`.
+
+```bash
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "চুরি করলে সর্বোচ্চ কত বছর জেল হতে পারে?"}'
+```
+
+`GET /health` returns a plain liveness check; `POST /ask` returns the
+generated answer together with the Act/section of every source chunk
+used.
 
 ---
 
@@ -311,8 +335,8 @@ questions to track this with a metric instead of a few examples.
 - **Embeddings:** [`BAAI/bge-m3`](https://huggingface.co/BAAI/bge-m3) (multilingual, via `sentence-transformers`)
 - **Retrieval:** FAISS (flat, inner-product / cosine similarity) for dense search, [`rank_bm25`](https://github.com/dorianbrown/rank_bm25) for keyword search, combined via weighted Reciprocal Rank Fusion
 - **Generation:** Gemini API (free tier) — answer synthesis with citations and a refusal path
-- **Serving:** FastAPI *(planned)*
-- **Ops:** Docker, GitHub Actions CI/CD, Prometheus/Grafana monitoring *(planned)*
+- **Serving:** FastAPI, served with Uvicorn — `/health` and `/ask` endpoints
+- **Ops:** Docker and docker-compose for containerized serving; GitHub Actions CI/CD and Prometheus/Grafana monitoring *(planned)*
 
 ---
 
