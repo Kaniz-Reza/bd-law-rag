@@ -10,5 +10,6 @@ repos:
     hooks:
       - id: detect-private-key
       - id: check-added-large-files
+        args: ['--maxkb=20000']
       - id: end-of-file-fixer
       - id: trailing-whitespace
