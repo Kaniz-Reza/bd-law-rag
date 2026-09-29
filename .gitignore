@@ -217,7 +217,12 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-data/
+data/*
+!data/processed/
+data/processed/*
+!data/processed/chunks.jsonl
+!data/processed/chunk_ids.json
+!data/processed/embeddings.faiss
 mlruns/
 chroma_db/
 .env
