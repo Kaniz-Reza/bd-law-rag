@@ -2,7 +2,6 @@ services:
   api:
     build:
       context: .
-      dockerfile: docker/Dockerfile
     ports:
       - "8000:8000"
     env_file:
