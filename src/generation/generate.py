@@ -22,10 +22,10 @@ ordinary questions while fixing a real, demonstrated failure mode.
 Uses the Gemini API free tier (no cost, no credit card) -- get a key at
 https://aistudio.google.com/app/apikey
 
-Gemini's servers occasionally return a 503 "high demand" error that has
-nothing to do with this code -- it means Google's servers are temporarily
-overloaded. call_llm() below automatically retries on that specific error,
-with an increasing wait between attempts, before giving up.
+Gemini's servers are often overloaded (503) or a model's free-tier daily
+quota runs out (429), and that has nothing to do with this code. call_llm()
+below therefore tries a list of models in order (LLM_MODEL_NAMES) and moves
+on to the next one as soon as one fails, instead of waiting on a busy model.
 
 Usage:
     python -m src.generation.generate "চুরি করলে সর্বোচ্চ কত বছর জেল হতে পারে?"
@@ -45,12 +45,6 @@ from google.genai import errors as genai_errors
 from google.genai import types
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from src.retrieval.hybrid_search import (
     bm25_search,
@@ -65,7 +59,14 @@ INDEX_PATH = Path("data/processed/embeddings.faiss")
 CHUNK_IDS_PATH = Path("data/processed/chunk_ids.json")
 
 EMBED_MODEL_NAME = "BAAI/bge-m3"
-LLM_MODEL_NAME = "gemini-3.8-flash"  # free tier (check current limits in AI Studio)
+
+# Tried in order. If one is overloaded (503) or out of free-tier quota (429,
+# tracked per model), the next one is tried straight away.
+LLM_MODEL_NAMES = [
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+]
 
 # Hybrid retrieval settings -- chosen and validated in src/evaluation/
 # evaluate_hybrid.py (see that file's docstring for the full history: an
@@ -150,37 +151,36 @@ def build_prompt(question: str, chunks: list[dict]) -> str:
     return f"{sources_block}\n\nQuestion: {question}"
 
 
-def _log_retry(retry_state) -> None:
-    """Called by tenacity right before each sleep, so the person waiting sees
-    why nothing is happening instead of a silent hang."""
-    attempt = retry_state.attempt_number
-    wait = retry_state.next_action.sleep if retry_state.next_action else 0
-    print(f"  Gemini is busy (503) -- retrying in {wait:.0f}s (attempt {attempt}/5)...")
+def call_llm(client: genai.Client, question: str, chunks: list[dict]) -> tuple[str, str]:
+    """Send the assembled prompt to Gemini and return (answer_text, model_used).
 
-
-@retry(
-    retry=retry_if_exception_type(genai_errors.ServerError),
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=2, min=2, max=60),
-    before_sleep=_log_retry,
-    reraise=True,
-)
-def call_llm(client: genai.Client, question: str, chunks: list[dict]) -> str:
-    """Send the assembled prompt to Gemini and return the answer text.
-
-    Retries automatically on a 503 ServerError (Gemini's "high demand"
-    response), waiting roughly 2s, 4s, 8s, 16s then up to 60s between the
-    5 attempts, before finally letting the error propagate."""
+    Tries each model in LLM_MODEL_NAMES in order. If one is overloaded (503)
+    or rejects the request (e.g. 429 quota exhausted -- the free-tier quota
+    is tracked per model), it moves straight on to the next one instead of
+    waiting and retrying the same busy model. Only if EVERY model fails does
+    the last error propagate."""
     prompt = build_prompt(question, chunks)
-    response = client.models.generate_content(
-        model=LLM_MODEL_NAME,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            max_output_tokens=2048,
-        ),
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_PROMPT,
+        max_output_tokens=2048,
     )
-    return response.text
+
+    last_error: Exception | None = None
+    for model_name in LLM_MODEL_NAMES:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=config,
+            )
+        except (genai_errors.ServerError, genai_errors.ClientError) as exc:
+            last_error = exc
+            print(f"  {model_name} unavailable ({type(exc).__name__}) -- trying the next model...")
+            continue
+        return response.text, model_name
+
+    assert last_error is not None  # LLM_MODEL_NAMES is never empty
+    raise last_error
 
 
 def main() -> None:
@@ -207,12 +207,12 @@ def main() -> None:
     client = genai.Client()  # reads GEMINI_API_KEY from the environment
 
     try:
-        answer = call_llm(client, question, chunks)
-    except genai_errors.ServerError:
+        answer, model_used = call_llm(client, question, chunks)
+    except (genai_errors.ServerError, genai_errors.ClientError):
         print(
-            "\nGemini's servers stayed overloaded through all 5 retries. "
-            "This is on Google's side, not your setup -- wait a minute and "
-            "run the same command again."
+            "\nEvery configured Gemini model was unavailable (overloaded or out of "
+            "free-tier quota). This is on Google's side, not your setup -- wait a "
+            "while and run the same command again."
         )
         return
 
@@ -221,6 +221,7 @@ def main() -> None:
     print("-" * 50)
     print(answer)
     print("=" * 50)
+    print(f"Answered by: {model_used}")
     print("\nSources used:")
     for chunk in chunks:
         print(f"  - {chunk['act_title']}, section {chunk['section_no']}")
