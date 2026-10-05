@@ -46,15 +46,15 @@ from src.retrieval.hybrid_search import build_bm25_index
 # so Grafana can later show averages and percentiles (e.g. "95% of requests
 # finished within X seconds").
 #
-# The bucket edges (seconds) stretch up to 80s on purpose: call_llm() retries
-# a failing Gemini call up to 5 times with 2s/4s/8s/16s waits, so one slow
-# request can legitimately take 30+ seconds.
+# The bucket edges (seconds) stretch up to 80s on purpose, so even a very
+# slow request (every Gemini model failing one after another) still lands
+# in a real bucket instead of falling off the end.
 SLOW_BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 40, 80)
 
 # One counter, split by "outcome" label, instead of three separate counters:
 #   success              -> answered normally
-#   gemini_server_error  -> Gemini overloaded (the 503s we saw)
-#   gemini_client_error  -> Gemini rejected the request, e.g. quota (the 429s)
+#   gemini_server_error  -> every Gemini model overloaded (503)
+#   gemini_client_error  -> every Gemini model rejected the request, e.g. quota (429)
 ASK_REQUESTS = Counter(
     "ask_requests_total",
     "Total /ask requests, split by outcome.",
@@ -72,8 +72,13 @@ RETRIEVAL_LATENCY = Histogram(
 )
 LLM_LATENCY = Histogram(
     "llm_latency_seconds",
-    "Time spent waiting on Gemini, including internal retries.",
+    "Time spent waiting on Gemini, including trying fallback models.",
     buckets=SLOW_BUCKETS,
+)
+LLM_MODEL_USED = Counter(
+    "llm_model_used_total",
+    "Which Gemini model produced the answer (shows when fallbacks kick in).",
+    ["model"],
 )
 
 # Populated once at startup by `lifespan` below, read by every request --
@@ -157,10 +162,10 @@ def ask(request: AskRequest) -> AskResponse:
 
         try:
             with LLM_LATENCY.time():
-                answer = call_llm(resources["client"], request.question, chunks)
+                answer, model_used = call_llm(resources["client"], request.question, chunks)
         except genai_errors.ServerError as exc:
-            # Gemini's servers are transiently overloaded -- call_llm() already
-            # retried 5 times internally (tenacity) before giving up.
+            # Every configured Gemini model was overloaded -- call_llm() already
+            # tried each of them in turn before giving up.
             ASK_REQUESTS.labels(outcome="gemini_server_error").inc()
             raise HTTPException(
                 status_code=503,
@@ -168,9 +173,9 @@ def ask(request: AskRequest) -> AskResponse:
             ) from exc
         except genai_errors.ClientError as exc:
             # Covers things like the free tier's daily request quota being
-            # exhausted (429 RESOURCE_EXHAUSTED) -- not retryable on a short
-            # timescale, so call_llm() does not retry this one; we just report
-            # it clearly instead of letting it crash into a bare 500.
+            # exhausted (429 RESOURCE_EXHAUSTED) on every model -- not retryable
+            # on a short timescale, so we just report it clearly instead of
+            # letting it crash into a bare 500.
             ASK_REQUESTS.labels(outcome="gemini_client_error").inc()
             raise HTTPException(
                 status_code=429,
@@ -181,5 +186,6 @@ def ask(request: AskRequest) -> AskResponse:
             ) from exc
 
     ASK_REQUESTS.labels(outcome="success").inc()
+    LLM_MODEL_USED.labels(model=model_used).inc()
     sources = [Source(act_title=c["act_title"], section_no=c["section_no"]) for c in chunks]
     return AskResponse(answer=answer, sources=sources)
