@@ -1,5 +1,6 @@
 # bd-law-rag
 
+[![CI](https://github.com/Kaniz-Reza/bd-law-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Kaniz-Reza/bd-law-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/deps-uv-purple.svg)](https://docs.astral.sh/uv/)
@@ -23,8 +24,11 @@ a portfolio project — from raw legal text to a served, monitored API.
 - [Project structure](#project-structure)
 - [Reproducing the data](#reproducing-the-data)
 - [Usage](#usage)
+- [Monitoring](#monitoring)
 - [Retrieval evaluation](#retrieval-evaluation)
 - [Generation and refusal path](#generation-and-refusal-path)
+- [Handling Gemini overload and quota](#handling-gemini-overload-and-quota)
+- [CI](#ci)
 - [Tech stack](#tech-stack)
 - [Data](#data)
 - [License](#license)
@@ -44,8 +48,11 @@ flowchart LR
     BM --> F2["Keyword search<br/>top-100"]
     F1 --> RRF["Weighted RRF<br/>fusion"]
     F2 --> RRF
-    RRF --> G["Generation<br/>LLM + citations"]
+    RRF --> G["Generation<br/>Gemini + citations<br/>(model fallback)"]
     G --> H["FastAPI service<br/>/ask"]
+    H --> M["/metrics"]
+    M --> P["Prometheus"]
+    P --> GR["Grafana<br/>dashboard"]
 ```
 
 A user question (Bangla or English) is embedded with the same multilingual
@@ -59,7 +66,7 @@ relevant.
 
 **Pilot scope:** 30 acts (12 Bengali, 18 English) · ~3,691 sections ·
 ~3,920 retrieval chunks. Acts span the Penal Code and Contract Act, 1872
-through modern statutes like the Digital-era Customs Act, 2023, so the
+through modern statutes like the Customs Act, 2023, so the
 pipeline is tested on both archaic English legal drafting and contemporary
 Bangla.
 
@@ -76,11 +83,13 @@ Bangla.
 | Embeddings and a searchable vector index                     | ✅ Done    |
 | Hand-written test set and retrieval metrics (recall@k, MRR)  | ✅ Done    |
 | Answer generation with an LLM, citations, refusal path       | ✅ Done    |
-| FastAPI service (`/health`, `/ask`)                          | ✅ Done    |
+| Gemini model fallback for overload (503) and quota (429)     | ✅ Done    |
+| FastAPI service (`/health`, `/ask`, `/metrics`)              | ✅ Done    |
 | Docker and docker-compose                                    | ✅ Done    |
-| CI/CD (GitHub Actions) with an evaluation gate                | ⬜ Planned |
+| CI (GitHub Actions): lint, tests, retrieval evaluation gate  | ✅ Done    |
+| Monitoring: Prometheus and a Grafana dashboard               | ✅ Done    |
+| Drift simulation                                             | ⬜ Planned |
 | Deployment with a public URL                                 | ⬜ Planned |
-| Monitoring (Prometheus/Grafana) and a drift simulation        | ⬜ Planned |
 
 ---
 
@@ -99,6 +108,9 @@ Answer generation calls the Gemini API (free tier — no cost, no credit
 card). Copy `.env.example` to `.env` and set `GEMINI_API_KEY` to a key
 from [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
 
+To run the API with the monitoring dashboard (see [Usage](#usage)) you
+also need Docker.
+
 ---
 
 ## Project structure
@@ -107,20 +119,26 @@ from [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
 src/
   ingestion/   # download, clean and validate the raw legal text
   retrieval/   # chunking, embeddings, and search over the chunks
-  generation/  # LLM prompting and answer generation
+  generation/  # LLM prompting, answer generation, Gemini model fallback
   evaluation/  # retrieval and answer-quality metrics
-  serving/     # the FastAPI service
-  monitoring/  # latency, cost, and drift metrics
+  serving/     # the FastAPI service (/health, /ask, /metrics)
+  monitoring/  # reserved for drift-monitoring code (not written yet)
+monitoring/    # Prometheus and Grafana config, used by docker-compose
 configs/       # config.yaml: pilot acts, chunking, retrieval, and LLM settings
-tests/         # unit tests for each module
+tests/         # unit tests
+.github/       # CI workflow
+Dockerfile, docker-compose.yml
 ```
 
 ---
 
 ## Reproducing the data
 
-The `data/` folder is not committed to this repo (see `.gitignore`), since
-it holds a ~60 MB dataset plus several generated files. To rebuild it:
+The raw dataset (`data/raw/`, ~60 MB) is not committed to this repo (see
+`.gitignore`). The processed files the API needs at startup —
+`data/processed/chunks.jsonl`, `chunk_ids.json` and `embeddings.faiss` —
+**are** committed, so the API and the Docker image work right after
+cloning. To rebuild everything from scratch:
 
 1. Download the [Bangladesh Legal Acts Dataset](https://www.kaggle.com/datasets/sakhadib/bangladesh-legal-acts-dataset)
    from Kaggle and unzip it into `data/raw/`.
@@ -164,21 +182,29 @@ python -m src.generation.generate "চুরি করলে সর্বোচ�
 The answer is generated only from retrieved chunks, cites the Act and
 section for every claim, and declines instead of guessing when the
 corpus doesn't cover the question — see
-[Generation and refusal path](#generation-and-refusal-path).
+[Generation and refusal path](#generation-and-refusal-path). The command
+also prints which Gemini model produced the answer — see
+[Handling Gemini overload and quota](#handling-gemini-overload-and-quota).
 
-### Running the API
+### Running the API with monitoring
 
 The same pipeline is also served over HTTP with FastAPI, containerized
-with Docker so it runs the same way on any machine:
+with Docker so it runs the same way on any machine. One command starts
+the API together with Prometheus and Grafana:
 
 ```bash
 docker compose up --build
 ```
 
-This builds the image, starts the service on `http://localhost:8000`,
-and persists the downloaded embedding model in a named volume so it
-isn't re-downloaded on every restart. Interactive API docs are at
-`http://localhost:8000/docs`.
+| Service    | URL                           | What it does                                                        |
+| ---------- | ----------------------------- | ------------------------------------------------------------------- |
+| API        | http://localhost:8000/docs    | the RAG service (interactive docs)                                  |
+| Prometheus | http://localhost:9090         | reads `/metrics` from the API every 5 seconds and stores the numbers |
+| Grafana    | http://localhost:3000         | dashboard (user `admin`, password `admin` — for local use only)     |
+
+The API reads `GEMINI_API_KEY` from `.env`. The downloaded embedding model
+and the Grafana data are kept in named volumes, so they are not lost on
+restart. Stop everything with `docker compose down`.
 
 ```bash
 curl -X POST http://localhost:8000/ask \
@@ -188,7 +214,44 @@ curl -X POST http://localhost:8000/ask \
 
 `GET /health` returns a plain liveness check; `POST /ask` returns the
 generated answer together with the Act/section of every source chunk
-used.
+used; `GET /metrics` is for Prometheus.
+
+---
+
+## Monitoring
+
+The API exposes these metrics with `prometheus_client` at `GET /metrics`:
+
+| Metric                        | What it measures                                                           |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `ask_requests_total{outcome}` | `/ask` requests, by outcome: `success`, `gemini_server_error`, `gemini_client_error` |
+| `ask_latency_seconds`         | total time per `/ask` request                                              |
+| `retrieval_latency_seconds`   | time spent in hybrid retrieval                                             |
+| `llm_latency_seconds`         | time waiting for Gemini, including fallback attempts                       |
+| `llm_model_used_total{model}` | which Gemini model produced the answer                                     |
+
+Prometheus is configured in `monitoring/prometheus.yml`. Grafana loads
+its data source and the **bd-law-rag monitoring** dashboard automatically
+from the files under `monitoring/grafana/`, so nothing has to be clicked
+together by hand. The dashboard has six panels:
+
+- Requests by outcome (total)
+- Answers by Gemini model (total)
+- Requests per minute, by outcome
+- Request latency (p50 / p95)
+- Average retrieval time vs. Gemini time
+- Answers per minute, by model
+
+![Grafana dashboard](docs/grafana-dashboard.png)
+
+**Checked end to end.** In a local run through `docker compose`, 12
+questions were sent to `/ask`. All 12 succeeded. The dashboard showed
+`gemini-3.5-flash-lite` answering 6, `gemini-3.6-flash` answering 6 and
+the first-choice `gemini-3.8-flash` answering none, so the fallback below
+was doing the work.
+
+A drift simulation, using the similarity score of the best-matching
+chunk as the signal, is planned next.
 
 ---
 
@@ -327,16 +390,81 @@ This is manual spot-checking, not an automated benchmark — a natural
 next step would be a small labelled set of in-corpus vs. out-of-corpus
 questions to track this with a metric instead of a few examples.
 
+**Checked again through the running API.** Answers were compared with
+the text in the corpus:
+
+- *Maternity leave:* 8 weeks before and 8 weeks after birth, only for a
+  woman who worked for the employer for at least 6 months before the birth
+  (Bangladesh Labour Act, 2006, sections 46–47).
+- *Selling adulterated goods:* up to 3 years in prison, or a fine of up
+  to 2 lakh taka, or both (Consumer Rights Protection Act, 2009,
+  section 41).
+- *Guardian of a minor:* the court decides by the welfare of the minor,
+  and a minor who is a citizen of Bangladesh can only be given a guardian
+  who is also a citizen (Guardians and Wards Act, 1890, sections 7, 17).
+- *Outside the corpus:* "What is the capital of France?" got "the
+  provided acts do not cover this question". For the minimum age for a
+  driving licence, the answer said no specific age is given, and pointed
+  to two related provisions that do exist in the corpus: a driver in a
+  road transport establishment must be at least 21 (Labour Act,
+  section 112(1)), and the birth certificate is the proof of age for a
+  driving licence (Birth and Death Registration Act, 2004,
+  section 18(3)).
+
+**Known limitation.** When the answer says the question is not covered,
+the `sources` list in the response can still show unrelated sections,
+because retrieval always returns the top 10 chunks. Using the similarity
+score of the best match to detect questions outside the corpus is a
+possible fix.
+
+---
+
+## Handling Gemini overload and quota
+
+The Gemini free tier sometimes returns a 503 (servers overloaded) or a
+429 (quota used up). Both happen per model, so one busy model does not
+mean the others are busy.
+
+`call_llm()` in `src/generation/generate.py` tries these models in order
+and moves to the next as soon as one fails:
+
+1. `gemini-3.8-flash`
+2. `gemini-3.6-flash`
+3. `gemini-3.5-flash-lite`
+
+If all three fail, `/ask` returns 503 (overloaded) or 429 (quota) with a
+clear message. The model that answered is counted in
+`llm_model_used_total{model}`, so the dashboard shows when the fallback
+is being used. This replaced an earlier approach that retried
+the same model up to 5 times, which could keep one request waiting for
+about a minute. The fallback logic is unit-tested with a fake client
+(`tests/test_llm_fallback.py`), so the tests need no real API key.
+
+---
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main`
+and on every pull request:
+
+1. Lint and format check with ruff
+2. Unit tests with pytest
+3. The retrieval evaluation (`evaluate_hybrid`) as a quality gate
+
+The embedding model is cached between runs, so the evaluation step does
+not download it every time.
+
 ---
 
 ## Tech stack
 
-- **Language / tooling:** Python 3.11, [uv](https://docs.astral.sh/uv/) for dependency management, pre-commit hooks
+- **Language / tooling:** Python 3.11, [uv](https://docs.astral.sh/uv/) for dependency management, pre-commit hooks, ruff
 - **Embeddings:** [`BAAI/bge-m3`](https://huggingface.co/BAAI/bge-m3) (multilingual, via `sentence-transformers`)
 - **Retrieval:** FAISS (flat, inner-product / cosine similarity) for dense search, [`rank_bm25`](https://github.com/dorianbrown/rank_bm25) for keyword search, combined via weighted Reciprocal Rank Fusion
-- **Generation:** Gemini API (free tier) — answer synthesis with citations and a refusal path
-- **Serving:** FastAPI, served with Uvicorn — `/health` and `/ask` endpoints
-- **Ops:** Docker and docker-compose for containerized serving; GitHub Actions CI/CD and Prometheus/Grafana monitoring *(planned)*
+- **Generation:** Gemini API (free tier) — answer synthesis with citations and a refusal path, with fallback across three models
+- **Serving:** FastAPI, served with Uvicorn — `/health`, `/ask` and `/metrics` endpoints
+- **Ops:** Docker and docker-compose for containerized serving; GitHub Actions for CI
+- **Monitoring:** `prometheus_client` metrics in the API, Prometheus and Grafana run by docker-compose
 
 ---
 
