@@ -106,6 +106,47 @@ def load_chunk_lookup(path: Path) -> dict[str, dict]:
     return lookup
 
 
+def retrieve_with_score(
+    question: str,
+    embed_model: SentenceTransformer,
+    index: faiss.Index,
+    chunk_ids: list[str],
+    chunk_lookup: dict[str, dict],
+    bm25: BM25Okapi,
+    bm25_chunk_ids: list[str],
+    top_k: int = TOP_K,
+) -> tuple[list[dict], float]:
+    """Hybrid retrieval: run FAISS (dense/semantic) and BM25 (keyword)
+    search independently, combine their rankings with weighted Reciprocal
+    Rank Fusion (FAISS trusted more, per FAISS_WEIGHT/BM25_WEIGHT), then
+    return the full chunk records for the fused top-k.
+
+    Each method alone misses things the other catches: FAISS can under-rank
+    a chunk that contains an exact rare keyword (see the module docstring's
+    theft/section-379 example); BM25 alone would miss paraphrases and
+    cross-lingual matches FAISS handles natively.
+
+    Also returns top_similarity: the cosine similarity of the single best
+    FAISS match (the index is inner-product over normalized vectors, so the
+    score IS the cosine similarity). It is the drift signal -- if user
+    questions start drifting away from what the corpus covers, the best
+    match gets less similar, and this number drops."""
+    query_vector = embed_model.encode([question], normalize_embeddings=True)
+    query_vector = np.asarray(query_vector, dtype="float32")
+    scores, row_indices = index.search(query_vector, FAISS_CANDIDATES)
+    top_similarity = float(scores[0][0])
+    dense_hits = [chunk_ids[row] for row in row_indices[0]]
+
+    keyword_hits = bm25_search(question, bm25, bm25_chunk_ids, BM25_CANDIDATES)
+
+    fused_ids = reciprocal_rank_fusion(
+        [dense_hits, keyword_hits],
+        weights=[FAISS_WEIGHT, BM25_WEIGHT],
+        top_k=top_k,
+    )
+    return [chunk_lookup[cid] for cid in fused_ids], top_similarity
+
+
 def retrieve(
     question: str,
     embed_model: SentenceTransformer,
@@ -116,28 +157,12 @@ def retrieve(
     bm25_chunk_ids: list[str],
     top_k: int = TOP_K,
 ) -> list[dict]:
-    """Hybrid retrieval: run FAISS (dense/semantic) and BM25 (keyword)
-    search independently, combine their rankings with weighted Reciprocal
-    Rank Fusion (FAISS trusted more, per FAISS_WEIGHT/BM25_WEIGHT), then
-    return the full chunk records for the fused top-k.
-
-    Each method alone misses things the other catches: FAISS can under-rank
-    a chunk that contains an exact rare keyword (see the module docstring's
-    theft/section-379 example); BM25 alone would miss paraphrases and
-    cross-lingual matches FAISS handles natively."""
-    query_vector = embed_model.encode([question], normalize_embeddings=True)
-    query_vector = np.asarray(query_vector, dtype="float32")
-    _, row_indices = index.search(query_vector, FAISS_CANDIDATES)
-    dense_hits = [chunk_ids[row] for row in row_indices[0]]
-
-    keyword_hits = bm25_search(question, bm25, bm25_chunk_ids, BM25_CANDIDATES)
-
-    fused_ids = reciprocal_rank_fusion(
-        [dense_hits, keyword_hits],
-        weights=[FAISS_WEIGHT, BM25_WEIGHT],
-        top_k=top_k,
+    """Same hybrid retrieval as retrieve_with_score(), returning only the
+    chunks. Kept so existing callers (the CLI below) do not need to change."""
+    chunks, _ = retrieve_with_score(
+        question, embed_model, index, chunk_ids, chunk_lookup, bm25, bm25_chunk_ids, top_k
     )
-    return [chunk_lookup[cid] for cid in fused_ids]
+    return chunks
 
 
 def build_prompt(question: str, chunks: list[dict]) -> str:

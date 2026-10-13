@@ -9,6 +9,7 @@ every request, instead of being reloaded on every single question.
 Endpoints:
     GET  /health   -> liveness check, no heavy work
     POST /ask      -> {"question": "..."} -> {"answer": "...", "sources": [...]}
+    POST /retrieve -> retrieval only (no Gemini call): similarity + sources
     GET  /metrics  -> Prometheus-format counters and timings (see below)
 
 Usage:
@@ -36,7 +37,7 @@ from src.generation.generate import (
     INDEX_PATH,
     call_llm,
     load_chunk_lookup,
-    retrieve,
+    retrieve_with_score,
 )
 from src.retrieval.hybrid_search import build_bm25_index
 
@@ -79,6 +80,17 @@ LLM_MODEL_USED = Counter(
     "llm_model_used_total",
     "Which Gemini model produced the answer (shows when fallbacks kick in).",
     ["model"],
+)
+
+# Drift signal: how similar the single best FAISS match is to the question
+# (cosine similarity, 0..1 in practice). Questions the corpus covers well
+# score high; questions drifting away from it score lower. The buckets are
+# packed in the 0.3-0.7 range where bge-m3 scores usually land.
+SIMILARITY_BUCKETS = (0.1, 0.2, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.8, 0.9, 1.0)
+RETRIEVAL_TOP_SIMILARITY = Histogram(
+    "retrieval_top1_similarity",
+    "Cosine similarity of the best-matching chunk for each question.",
+    buckets=SIMILARITY_BUCKETS,
 )
 
 # Populated once at startup by `lifespan` below, read by every request --
@@ -139,26 +151,49 @@ class AskResponse(BaseModel):
     sources: list[Source]
 
 
+class RetrieveResponse(BaseModel):
+    top_similarity: float
+    sources: list[Source]
+
+
+def run_retrieval(question: str) -> tuple[list[dict], float]:
+    """Hybrid retrieval with the resources loaded at startup. Times it, and
+    records the best-match similarity (the drift signal). Shared by /ask and
+    /retrieve so both feed the same metrics."""
+    with RETRIEVAL_LATENCY.time():
+        chunks, top_similarity = retrieve_with_score(
+            question,
+            resources["embed_model"],
+            resources["index"],
+            resources["chunk_ids"],
+            resources["chunk_lookup"],
+            resources["bm25"],
+            resources["bm25_chunk_ids"],
+        )
+    RETRIEVAL_TOP_SIMILARITY.observe(top_similarity)
+    return chunks, top_similarity
+
+
+@app.post("/retrieve", response_model=RetrieveResponse)
+def retrieve_only(request: AskRequest) -> RetrieveResponse:
+    """Retrieval only: no Gemini call, so it uses no Gemini quota. Returns the
+    best-match similarity and the sources. Used to watch (and simulate) drift."""
+    chunks, top_similarity = run_retrieval(request.question)
+    sources = [Source(act_title=c["act_title"], section_no=c["section_no"]) for c in chunks]
+    return RetrieveResponse(top_similarity=top_similarity, sources=sources)
+
+
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest) -> AskResponse:
     """Retrieve + generate, using the resources loaded once at startup --
-    the exact same retrieve()/call_llm() functions the CLI (generate.py)
+    the same hybrid retrieval and call_llm() code the CLI (generate.py)
     uses, so the API and the CLI can never silently drift apart.
 
     `with X.time():` starts a stopwatch on entering the block and records the
     elapsed time into histogram X on leaving it -- even if an error is raised
     inside, so failed requests are timed too."""
     with ASK_LATENCY.time():
-        with RETRIEVAL_LATENCY.time():
-            chunks = retrieve(
-                request.question,
-                resources["embed_model"],
-                resources["index"],
-                resources["chunk_ids"],
-                resources["chunk_lookup"],
-                resources["bm25"],
-                resources["bm25_chunk_ids"],
-            )
+        chunks, _ = run_retrieval(request.question)
 
         try:
             with LLM_LATENCY.time():
